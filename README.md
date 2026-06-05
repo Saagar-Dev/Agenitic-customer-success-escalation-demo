@@ -198,17 +198,6 @@ The result is a CS team that never sleeps, never gets stretched thin, and never 
 
 ---
 
-## The Full Demo Suite
-
-| File | Demo |
-|------|------|
-| `cs_engine.html` | **CS Escalation Engine** — this file |
-| `rev_heb.html` | **Agentic Revenue Engine** — 10 sales agents, HEB visualisation, $1.6M pipeline |
-| `kerala_v2.html` | **Kerala Kitchen** — 2 agents shop a directed market graph and cook a feast |
-| `pokemon.html` | **Pokémon Battle** — agentic AI battle simulator |
-| `brisbane.html` | **Brisbane City Intelligence** — 8 agents analyse real suburb data on a live Leaflet map |
-
----
 
 ## About
 
