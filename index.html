@@ -1,0 +1,1225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>CS Escalation Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+:root{
+  --bg:#060b14;--hbg:#080e1a;--lbg:#04080f;--border:rgba(0,255,136,0.12);
+  --border2:rgba(0,255,136,0.22);--text:#e2ffe8;--muted:#4a7a5a;--dim:#2a4a3a;
+  --mono:'JetBrains Mono',monospace;
+  --critical:#ff4444;--high:#ff8800;--medium:#ffd700;--safe:#00ff88;
+  --accent:#00ff88;--accent2:#aa44ff;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+/* HEADER */
+.hdr{display:flex;align-items:center;gap:10px;padding:.45rem 1.2rem;background:var(--hbg);border-bottom:1px solid var(--border);flex-shrink:0;}
+.brand{font-size:13px;font-weight:700;color:#00ff88;letter-spacing:.08em;text-shadow:0 0 12px rgba(6,182,212,0.4);}
+/* Cyberpunk scan line */
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,rgba(6,182,212,0.015) 0px,transparent 1px,transparent 3px);pointer-events:none;z-index:9999;}
+/* Cyberpunk border glow */
+.hdr{box-shadow:0 1px 0 rgba(0,255,136,0.12),0 2px 20px rgba(0,0,0,0.5);}
+.left-panel{box-shadow:1px 0 0 rgba(0,255,136,0.08);}
+.right-panel{box-shadow:-1px 0 0 rgba(0,255,136,0.15);}
+.sub{font-size:8px;color:var(--muted);margin-top:1px;}
+.rev-badge{background:rgba(6,182,212,0.08);border:1px solid var(--border2);border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;color:#00ff88;margin-left:auto;}
+.vsep{width:1px;height:18px;background:var(--border);flex-shrink:0;}
+.lbl{font-size:8px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;flex-shrink:0;}
+.btn{font-family:var(--mono);font-size:10px;cursor:pointer;border-radius:5px;padding:4px 12px;transition:all .15s;flex-shrink:0;}
+.btnp{background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.4);color:#00ff88;font-weight:700;}
+.btnp:hover{background:rgba(0,255,136,0.12);}
+.btns{background:#080e1a;border:1px solid rgba(0,255,136,0.2);color:var(--muted);}
+.btns:hover{border-color:#00ff88;color:#00ff88;}
+.btns:disabled{opacity:.4;cursor:not-allowed;}
+/* ── COMMAND CENTRE LAYOUT ── */
+.body{display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0;}
+
+/* DUAL CHART SECTION */
+.radar-section{flex:1;display:flex;min-height:0;overflow:hidden;}
+.chart-panel{flex:1;position:relative;overflow:hidden;background:var(--bg);}
+.chart-panel+.chart-panel{border-left:1px solid var(--border);}
+#risk-svg{width:100%;height:100%;}
+#timeline-svg{width:100%;height:100%;}
+.kpi-overlay{position:absolute;top:8px;right:10px;z-index:10;display:flex;gap:5px;pointer-events:none;}
+.kpi{background:rgba(4,8,15,0.88);border:1px solid rgba(0,255,136,0.18);border-radius:6px;padding:6px 11px;text-align:center;backdrop-filter:blur(8px);}
+.kpi-v{font-size:14px;font-weight:700;color:#00ff88;}
+.kpi-l{font-size:8px;color:#4a7a5a;text-transform:uppercase;letter-spacing:.05em;margin-top:1px;}
+.chart-label{position:absolute;top:8px;left:10px;z-index:10;font-size:9px;color:#4a7a5a;letter-spacing:.07em;background:rgba(4,8,15,0.75);padding:3px 10px;border-radius:3px;border:1px solid rgba(0,255,136,0.12);}
+
+/* AGENT STRIP — 8 compact horizontal cards */
+.agents-strip{flex-shrink:0;display:flex;border-top:1px solid var(--border);background:var(--hbg);overflow-x:auto;height:118px;}
+.agents-strip::-webkit-scrollbar{height:3px;}
+.agents-strip::-webkit-scrollbar-thumb{background:rgba(0,255,136,0.12);border-radius:2px;}
+.ac{flex-shrink:0;width:190px;padding:7px 10px;border-right:1px solid var(--border);display:flex;flex-direction:column;cursor:default;transition:background .2s;}
+.ac:hover{background:rgba(6,182,212,0.03);}
+.ac-hdr{display:flex;align-items:center;gap:5px;margin-bottom:4px;}
+.ac-emoji{font-size:13px;flex-shrink:0;}
+.ac-name{font-size:10px;font-weight:700;}
+.ac-role{font-size:7px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+.ac-arr{font-size:11px;font-weight:700;margin-left:auto;text-align:right;}
+.ac-calls{font-size:7px;color:var(--dim);text-align:right;}
+.ac-state{font-size:9px;color:var(--muted);height:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px;}
+.bar-row{display:flex;justify-content:space-between;font-size:7px;color:var(--dim);margin-bottom:1px;}
+.bar{height:3px;background:rgba(255,255,255,0.07);border-radius:2px;margin-bottom:3px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:2px;transition:width .5s;}
+.esc-pills{display:flex;flex-wrap:wrap;gap:2px;margin-top:2px;}
+.epill{font-size:7px;padding:1px 5px;border-radius:6px;border:1px solid;white-space:nowrap;}
+.dec-log,.dec-e,.dec-ts,.dec-tx{display:none;}
+
+/* ESCALATION STRIP — horizontal scrolling */
+.esc-strip{flex-shrink:0;border-top:1px solid var(--border);background:var(--lbg);display:flex;align-items:stretch;overflow-x:auto;height:86px;}
+.esc-strip::-webkit-scrollbar{height:3px;}
+.esc-strip::-webkit-scrollbar-thumb{background:rgba(6,182,212,0.25);border-radius:2px;}
+.esc-strip-label{flex-shrink:0;writing-mode:vertical-rl;font-size:7px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;padding:0 9px;border-right:1px solid var(--border);display:flex;align-items:center;}
+.esc-item{flex-shrink:0;width:208px;padding:8px 10px;border-right:1px solid var(--border);border-left:3px solid;display:flex;flex-direction:column;justify-content:space-between;}
+.esc-acct{font-size:11px;font-weight:700;}
+.esc-sev{font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;}
+.esc-arr{font-size:11px;font-weight:700;}
+.esc-plan{font-size:8px;color:#64748b;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.esc-empty{display:flex;align-items:center;padding:0 20px;font-size:10px;color:var(--dim);white-space:nowrap;}
+
+/* NEWS TICKER */
+.ticker-bar{flex-shrink:0;height:30px;background:rgba(2,6,14,0.98);border-top:1px solid rgba(0,255,136,0.12);border-bottom:1px solid rgba(6,182,212,0.08);display:flex;align-items:center;overflow:hidden;}
+.ticker-label{font-family:var(--mono);font-size:9px;font-weight:700;color:#00ff88;padding:0 12px;border-right:1px solid rgba(6,182,212,0.25);white-space:nowrap;flex-shrink:0;letter-spacing:.08em;background:rgba(6,182,212,0.06);}
+.ticker-track{flex:1;overflow:hidden;position:relative;height:100%;}
+#ticker-inner{white-space:nowrap;position:absolute;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:11px;font-weight:600;color:#e2ffe8;}
+.ticker-pill{font-family:var(--mono);font-size:8px;padding:2px 6px;border-radius:10px;border:1px solid;white-space:nowrap;flex-shrink:0;opacity:.75;cursor:default;}
+/* LOG BAR */
+.log-bar{flex-shrink:0;display:flex;background:var(--lbg);border-top:1px solid var(--border);padding:.5rem 1.1rem;height:165px;}
+.log-inner{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;}
+.log-lbl{font-size:8px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px;flex-shrink:0;}
+.log{display:flex;flex-direction:column;overflow-y:scroll;flex:1;min-height:0;}
+.log::-webkit-scrollbar{width:3px;}
+.log::-webkit-scrollbar-thumb{background:rgba(0,255,136,0.12);border-radius:2px;}
+.ll{font-family:var(--mono);font-size:10px;line-height:1.55;white-space:pre-wrap;word-break:break-word;padding:0 3px;flex-shrink:0;}
+.lm{color:#2a3a5a}.lt{color:#a855f7}.ly{color:#eab308;font-weight:600}.le{color:#ef4444}.lb{color:#00ff88}
+/* MODALS */
+.expand-modal{position:fixed;inset:0;background:rgba(2,6,12,0.97);z-index:3000;display:none;flex-direction:column;backdrop-filter:blur(16px);}
+.expand-modal.open{display:flex;}
+.expand-hdr{display:flex;align-items:center;justify-content:space-between;padding:.6rem 1.2rem;background:var(--hbg);border-bottom:1px solid var(--border);flex-shrink:0;}
+.expand-title{font-family:var(--mono);font-size:11px;font-weight:700;color:#00ff88;letter-spacing:.08em;}
+.expand-close{font-family:var(--mono);font-size:10px;color:var(--muted);cursor:pointer;padding:4px 10px;border:1px solid var(--border2);border-radius:4px;background:transparent;transition:all .2s;}
+.expand-close:hover{color:var(--text);border-color:#00ff88;}
+.expand-body{flex:1;overflow-y:auto;padding:1rem 1.2rem;}
+.expand-body::-webkit-scrollbar{width:5px;}
+.expand-body::-webkit-scrollbar-thumb{background:rgba(6,182,212,0.25);border-radius:3px;}
+.xbtn{font-size:11px;cursor:pointer;color:var(--muted);padding:1px 5px;border-radius:3px;border:1px solid transparent;transition:all .2s;line-height:1;}
+.xbtn:hover{color:#00ff88;border-color:rgba(0,255,136,0.2);}
+/* KANBAN */
+.kanban-outer{overflow-x:auto;align-items:flex-start;padding-bottom:10px;}
+.kanban-outer::-webkit-scrollbar{height:5px;}
+.kanban-outer::-webkit-scrollbar-track{background:rgba(0,0,0,0.2);border-radius:3px;}
+.kanban-outer::-webkit-scrollbar-thumb{background:rgba(0,255,136,0.22);border-radius:3px;}
+.kanban-body::-webkit-scrollbar{width:4px;}
+.kanban-body::-webkit-scrollbar-track{background:rgba(0,0,0,0.2);border-radius:2px;}
+.kanban-body::-webkit-scrollbar-thumb{border-radius:2px;}
+/* VICTORY */
+#vov{position:fixed;inset:0;background:rgba(2,6,12,0.95);z-index:1000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(14px);opacity:0;pointer-events:none;transition:opacity .5s;overflow-y:auto;padding:16px;}
+@keyframes vpop{from{transform:scale(0.85) translateY(20px);opacity:0}to{transform:scale(1) translateY(0);opacity:1}}
+/* INTRO */
+#intro-overlay{position:fixed;inset:0;background:rgba(2,6,12,0.97);z-index:2000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(16px);overflow-y:auto;padding:16px;}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+/* RISK ZONE LABELS */
+.zone-label{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;pointer-events:none;}
+/* Severity colours */
+.sev-p1{color:#ff4444;border-color:#ff4444;}
+.sev-p2{color:#ff8800;border-color:#ff8800;}
+.sev-p3{color:#ffd700;border-color:#ffd700;}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div style="display:flex;flex-direction:column;line-height:1.2">
+    <span class="brand">CS ESCALATION ENGINE</span>
+    <span class="sub">by Saagar Devadiga</span>
+  </div>
+  <div class="vsep"></div>
+  <button class="btn btnp" id="bstart" onclick="startMission()">▶ RUN AGENTS</button>
+  <button class="btn btns" onclick="testAPI()">TEST</button>
+  <button class="btn btns" onclick="resetMission()">RESET</button>
+  <div class="vsep"></div>
+  <span class="lbl">SPEED</span>
+  <button class="btn btns" id="spd-05" onclick="setSpeed(0.5)" style="padding:3px 8px">0.5×</button>
+  <button class="btn btns" id="spd-1"  onclick="setSpeed(1)"   style="padding:3px 8px;border-color:rgba(6,182,212,0.4);color:#00ff88">1×</button>
+  <button class="btn btns" id="spd-2"  onclick="setSpeed(2)"   style="padding:3px 8px">2×</button>
+  <button class="btn btns" id="pause-btn" onclick="togglePause()" style="padding:3px 10px">⏸ Pause</button>
+  <div class="vsep"></div>
+  <button class="btn btns" onclick="openStory()" style="padding:3px 10px;border-color:rgba(168,85,247,0.3);color:#a855f7">🧠 Reasoning Board</button>
+  <span id="rev-badge" class="rev-badge" style="display:none">$0 ARR Protected</span>
+</div>
+
+<!-- BODY: COMMAND CENTRE -->
+<div class="body">
+
+  <!-- DUAL CHARTS -->
+  <div class="radar-section">
+
+    <!-- LEFT: Risk Radar -->
+    <div class="chart-panel" id="gwrap">
+      <div class="chart-label">
+        🎯 Risk Radar &nbsp;·&nbsp;
+        <span style="color:var(--critical)">● Critical</span>
+        <span style="margin-left:5px;color:var(--high)">● High</span>
+        <span style="margin-left:5px;color:var(--medium)">● Medium</span>
+        <span style="margin-left:5px;color:var(--safe)">● Safe</span>
+        <span class="xbtn" onclick="openExpand('reasoning')" style="margin-left:8px;pointer-events:all" title="Reasoning Board">🧠</span>
+      </div>
+      <div class="kpi-overlay">
+        <div class="kpi"><div class="kpi-v" id="kpi-arr">$5.7M</div><div class="kpi-l">Total ARR</div></div>
+        <div class="kpi"><div class="kpi-v" id="kpi-risk" style="color:var(--critical)">$4.2M</div><div class="kpi-l">At Risk</div></div>
+        <div class="kpi"><div class="kpi-v" id="kpi-esc">0</div><div class="kpi-l">Escalations</div></div>
+        <div class="kpi"><div class="kpi-v" id="kpi-prot" style="color:var(--safe)">$0</div><div class="kpi-l">Protected</div></div>
+      </div>
+      <svg id="risk-svg"></svg>
+    </div>
+
+    <!-- RIGHT: Renewal Urgency Timeline -->
+    <div class="chart-panel" id="timeline-wrap">
+      <div class="chart-label">⏰ Renewal Urgency Timeline &nbsp;·&nbsp; bar length = days remaining &nbsp;·&nbsp; thickness = ARR at stake</div>
+      <svg id="timeline-svg"></svg>
+    </div>
+
+  </div>
+
+  <!-- AGENT STRIP: 8 compact horizontal cards -->
+  <div class="agents-strip" id="agents-wrap"></div>
+
+  <!-- ESCALATION STRIP: horizontal cards -->
+  <div class="esc-strip" id="esc-strip">
+    <div class="esc-strip-label">ESCALATIONS</div>
+    <div class="esc-empty" id="esc-feed">No escalations yet · agents will create them here as they investigate</div>
+  </div>
+
+</div>
+
+<!-- TICKER + LOG -->
+<div class="ticker-bar">
+  <span class="ticker-label">⚡ LIVE</span>
+  <div class="ticker-track">
+    <div id="ticker-inner">Deploy agents to monitor your portfolio…</div>
+  </div>
+  <div id="ticker-history" style="display:flex;align-items:center;gap:5px;padding:0 10px;border-left:1px solid rgba(0,255,136,0.12);flex-shrink:0;max-width:260px;overflow:hidden"></div>
+</div>
+<div class="log-bar">
+  <div class="log-inner">
+    <div class="log-lbl">▸ AGENT LOG</div>
+    <div class="log" id="log"><div class="ll lm">Run agents to begin monitoring.</div></div>
+  </div>
+</div>
+
+<!-- REASONING BOARD MODAL -->
+<div id="modal-reasoning" class="expand-modal">
+  <div class="expand-hdr">
+    <span class="expand-title">🧠 Agent Reasoning Board</span>
+    <button class="expand-close" onclick="closeExpand('reasoning')">✕ CLOSE</button>
+  </div>
+  <div class="expand-body" id="modal-reasoning-body"></div>
+</div>
+
+<!-- VICTORY OVERLAY -->
+<div id="vov">
+  <div style="background:linear-gradient(145deg,rgba(4,12,24,0.99),rgba(2,8,16,0.99));border:1px solid rgba(6,182,212,0.25);border-radius:18px;padding:1.4rem 1.8rem;max-width:1060px;width:97%;position:relative;animation:vpop .5s cubic-bezier(.34,1.56,.64,1) both">
+    <div style="font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">Mission Complete · CS Escalation Engine</div>
+    <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:1rem;padding-bottom:.8rem;border-bottom:1px solid rgba(6,182,212,0.1)">
+      <div style="font-size:26px;font-weight:700;color:#00ff88">$<span id="v-arr">0</span></div>
+      <div style="font-size:11px;color:var(--muted)">ARR protected · <span id="v-esc" style="color:#ffd700">0</span> escalations · <span id="v-calls">0</span> API calls</div>
+    </div>
+    <div style="display:grid;grid-template-columns:270px 1fr;gap:16px;margin-bottom:1rem">
+      <div>
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">🏆 Agent Rankings</div>
+        <div id="v-ranking"></div>
+      </div>
+      <div>
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">📋 Escalation Scorecards</div>
+        <div id="v-scorecards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px"></div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding-top:.7rem;border-top:1px solid rgba(6,182,212,0.1)">
+      <span style="font-size:9px;color:var(--dim)">Powered by Claude Haiku · Saagar Devadiga</span>
+      <button onclick="document.getElementById('vov').style.cssText+='opacity:0;pointer-events:none';resetMission();" style="background:rgba(6,182,212,0.1);border:1px solid rgba(0,255,136,0.2);border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;color:#00ff88;cursor:pointer">▶ New Mission</button>
+    </div>
+  </div>
+</div>
+
+<!-- INTRO OVERLAY -->
+<div id="intro-overlay">
+<div style="background:linear-gradient(145deg,rgba(4,12,24,0.99),rgba(2,8,16,0.99));border:1px solid rgba(6,182,212,0.25);border-radius:16px;padding:1.6rem 2rem;max-width:1040px;width:97%;box-shadow:0 0 60px rgba(6,182,212,0.07)">
+  <!-- HEADER -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1rem;padding-bottom:.8rem;border-bottom:1px solid rgba(6,182,212,0.12)">
+    <div>
+      <div style="font-size:9px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-bottom:2px">Welcome to</div>
+      <div style="font-size:18px;font-weight:700;color:#00ff88">CS ESCALATION ENGINE</div>
+      <div style="font-size:9px;color:var(--muted);margin-top:2px">by Saagar Devadiga · Data Engineer &amp; AI Developer, Brisbane</div>
+    </div>
+    <div style="text-align:right;flex-shrink:0;margin-left:16px">
+      <div style="font-size:13px;font-weight:700;color:#ff4444">$4.2M At Risk</div>
+      <div style="font-size:9px;color:var(--muted)">8 agents · 20 accounts · 30 days to act</div>
+    </div>
+  </div>
+  <!-- TWO COLUMNS -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;margin-bottom:1rem">
+    <!-- LEFT -->
+    <div style="display:flex;flex-direction:column;gap:.7rem">
+      <div style="background:rgba(255,68,68,0.04);border:1px solid rgba(255,68,68,0.2);border-radius:10px;padding:12px 14px">
+        <div style="font-size:8px;color:#ff4444;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">🚨 The Scenario</div>
+        <p style="font-size:12px;color:var(--text);line-height:1.8">You manage a <strong>$5.7M ARR portfolio</strong> of 20 B2B SaaS accounts. Six are <strong style="color:#ff4444">critically at risk</strong> — renewal in under 30 days, usage collapsing, or executives going dark.<br><br>Your CS team is stretched thin. So you deploy <strong>8 specialised AI agents simultaneously</strong> — each one monitoring, investigating, and escalating at a speed no human team can match.</p>
+      </div>
+      <div>
+        <div style="font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px">Your 8 CS Agents</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px" id="intro-agents"></div>
+      </div>
+      <div style="background:rgba(6,182,212,0.03);border:1px solid rgba(6,182,212,0.08);border-radius:8px;padding:10px 12px">
+        <div style="font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Why Agentic AI wins here</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center">
+          <div style="font-size:10px;color:var(--muted)"><div style="font-size:13px;margin-bottom:2px">🔭</div><strong style="color:#2a4a3a;display:block;font-size:9px">Scans</strong>All 20 accounts simultaneously</div>
+          <div style="font-size:10px;color:var(--muted)"><div style="font-size:13px;margin-bottom:2px">🧠</div><strong style="color:#2a4a3a;display:block;font-size:9px">Reasons</strong>Root cause analysis</div>
+          <div style="font-size:10px;color:var(--muted)"><div style="font-size:13px;margin-bottom:2px">🚨</div><strong style="color:#2a4a3a;display:block;font-size:9px">Escalates</strong>Creates recovery plans</div>
+          <div style="font-size:10px;color:var(--muted)"><div style="font-size:13px;margin-bottom:2px">🛡️</div><strong style="color:#2a4a3a;display:block;font-size:9px">Protects</strong>ARR before it churns</div>
+        </div>
+      </div>
+    </div>
+    <!-- RIGHT -->
+    <div style="display:flex;flex-direction:column;gap:.7rem">
+      <div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:11px 12px">
+        <div style="font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">📐 Screen Layout</div>
+        <div style="display:grid;grid-template-columns:1fr 1.6fr 1fr;gap:4px;margin-bottom:7px">
+          <div style="background:rgba(6,182,212,0.05);border:1px solid rgba(6,182,212,0.18);border-radius:5px;padding:7px 6px;text-align:center">
+            <div style="font-size:8px;font-weight:700;color:#00ff88;margin-bottom:3px">LEFT</div>
+            <div style="font-size:9px;color:var(--muted);line-height:1.5">8 agent cards · live decisions · budget · escalations</div>
+          </div>
+          <div style="background:rgba(255,68,68,0.05);border:1px solid rgba(255,68,68,0.18);border-radius:5px;padding:7px 6px;text-align:center">
+            <div style="font-size:8px;font-weight:700;color:#ff4444;margin-bottom:3px">RISK RADAR</div>
+            <div style="font-size:9px;color:var(--muted);line-height:1.5">20 accounts · bubble size = ARR · center = critical risk · outer ring = safe · agents pulse accounts they\'re working</div>
+          </div>
+          <div style="background:rgba(255,215,0,0.05);border:1px solid rgba(255,215,0,0.18);border-radius:5px;padding:7px 6px;text-align:center">
+            <div style="font-size:8px;font-weight:700;color:#ffd700;margin-bottom:3px">RIGHT</div>
+            <div style="font-size:9px;color:var(--muted);line-height:1.5">ARR summary · live escalations feed</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:3px">
+          <div style="background:rgba(0,0,0,0.2);border-radius:3px;padding:4px;text-align:center;font-size:8px;color:var(--muted)"><span style="color:#00ff88;font-weight:700;display:block">▶ RUN</span>Deploy all 8</div>
+          <div style="background:rgba(0,0,0,0.2);border-radius:3px;padding:4px;text-align:center;font-size:8px;color:var(--muted)"><span style="color:#ffd700;font-weight:700;display:block">⏸ PAUSE</span>Freeze agents</div>
+          <div style="background:rgba(0,0,0,0.2);border-radius:3px;padding:4px;text-align:center;font-size:8px;color:var(--muted)"><span style="color:#2a4a3a;font-weight:700;display:block">0.5×1×2×</span>Speed</div>
+          <div style="background:rgba(0,0,0,0.2);border-radius:3px;padding:4px;text-align:center;font-size:8px;color:var(--muted)"><span style="color:#aa44ff;font-weight:700;display:block">🧠 Board</span>All reasoning</div>
+        </div>
+      </div>
+      <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(6,182,212,0.1);border-radius:10px;padding:12px 14px;flex:1;display:flex;flex-direction:column;justify-content:space-between">
+        <div>
+          <div style="font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">🔑 Anthropic API Key</div>
+          <div style="display:flex;gap:7px;margin-bottom:5px">
+            <input id="intro-key" type="password" placeholder="sk-ant-api03-…" autocomplete="off"
+              style="flex:1;background:rgba(6,182,212,0.04);border:1px solid rgba(0,255,136,0.12);border-radius:6px;padding:9px 11px;font-family:var(--mono);font-size:10px;color:#00ff88;outline:none;transition:border .2s"
+              onfocus="this.style.borderColor='#00ff88'" onblur="this.style.borderColor='rgba(0,255,136,0.12)'"
+              oninput="onKeyInput(this.value)"/>
+            <div id="key-st" style="display:flex;align-items:center;font-family:var(--mono);font-size:9px;color:var(--muted);white-space:nowrap;flex-shrink:0">Enter →</div>
+          </div>
+          <div style="font-size:10px;color:var(--dim)">Stays in your browser. Sent only to Anthropic\'s API.</div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
+          <span style="font-size:10px;color:var(--dim)">Built by <strong style="color:var(--muted)">Saagar Devadiga</strong></span>
+          <button id="launch-btn" onclick="launchAgents()"
+            style="background:rgba(6,182,212,0.1);border:1px solid rgba(0,255,136,0.22);border-radius:7px;padding:10px 22px;font-family:var(--mono);font-size:11px;font-weight:700;color:#00ff88;cursor:pointer;opacity:.5;transition:transform .15s"
+            onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+            ▶ DEPLOY 8 AGENTS
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+const API_KEY = 'PASTE_YOUR_KEY_HERE';
+
+// ── AGENTS ──
+const AGENTS = [
+  {id:'scout', name:'Scout', role:'Portfolio Monitor',      emoji:'🔭', color:'#00ff88', maxStam:100, costHop:2, specialty:'broad health scan across all accounts'},
+  {id:'pulse', name:'Pulse', role:'NPS & Sentiment',        emoji:'💓', color:'#ff44aa', maxStam:90,  costHop:2, specialty:'NPS scores, survey feedback, and satisfaction signals'},
+  {id:'lens',  name:'Lens',  role:'Usage Intelligence',     emoji:'🔍', color:'#00aaff', maxStam:90,  costHop:2, specialty:'product adoption, feature usage, and login frequency'},
+  {id:'rex',   name:'Rex',   role:'Renewal Specialist',     emoji:'⚡', color:'#ffd700', maxStam:85,  costHop:3, specialty:'contract renewals, days-to-expiry, and commercial risk'},
+  {id:'vera',  name:'Vera',  role:'Voice of Customer',      emoji:'🎙️', color:'#aa44ff', maxStam:90,  costHop:2, specialty:'support tickets, escalation history, and relationship health'},
+  {id:'cole',  name:'Cole',  role:'Financial Risk',         emoji:'💰', color:'#ff8800', maxStam:85,  costHop:3, specialty:'ARR at risk, payment delays, and expansion or contraction signals'},
+  {id:'quinn', name:'Quinn', role:'Escalation Coordinator', emoji:'🎯', color:'#00ffdd', maxStam:95,  costHop:2, specialty:'triage and prioritisation of highest-value at-risk accounts'},
+  {id:'sage',  name:'Sage',  role:'Recovery Strategist',    emoji:'🧠', color:'#ff6644', maxStam:85,  costHop:3, specialty:'building recovery plans and save strategies for critical accounts'},
+];
+
+// ── ACCOUNTS ──
+const ACCOUNTS = [
+  // CRITICAL — renewal <30 days
+  {id:'techvision', name:'TechVision',  arr:320000, days:12, risk:'critical', signals:'Usage -60% MoM · 3 open P1 tickets · Champion left company'},
+  {id:'novasoft',   name:'NovaSoft',    arr:210000, days:8,  risk:'critical', signals:'Exec sponsor vacant · QBR refused twice · NPS dropped to 3'},
+  {id:'skylab',     name:'Skylab',      arr:140000, days:15, risk:'critical', signals:'NPS score 2 · 5 escalations unanswered · Support rage detected'},
+  {id:'pinnacle',   name:'Pinnacle',    arr:420000, days:25, risk:'critical', signals:'Actively evaluating competitor · Pricing review requested · Usage flat'},
+  {id:'nexgen',     name:'Nexgen',      arr:290000, days:20, risk:'critical', signals:'Invoice 45 days overdue · Budget review underway · Adoption low'},
+  {id:'apexus',     name:'Apexus',      arr:430000, days:18, risk:'critical', signals:'Contract reduction requested · New CFO hired · ROI concerns raised'},
+  // HIGH — renewal 31-90 days
+  {id:'acmecorp',   name:'Acme Corp',   arr:480000, days:45, risk:'high', signals:'Executive sponsor disengaged · Feature adoption 30% · 2 missed QBRs'},
+  {id:'meridian',   name:'Meridian',    arr:650000, days:90, risk:'high', signals:'Usage declining 3 consecutive months · No exec sponsor · Budget freeze'},
+  {id:'primeedge',  name:'PrimeEdge',   arr:175000, days:30, risk:'high', signals:'Support tickets 3x baseline · Satisfaction declining · Onboarding stalled'},
+  {id:'cortex',     name:'Cortex',      arr:380000, days:75, risk:'high', signals:'New CTO evaluating full stack · Architecture review · Seat reduction'},
+  {id:'stratos',    name:'Stratos',     arr:180000, days:45, risk:'high', signals:'2 missed QBRs · Primary champion on extended leave · Usage plateau'},
+  {id:'polaris',    name:'Polaris',     arr:520000, days:35, risk:'high', signals:'Company-wide budget cuts announced · Headcount freeze · Reduced scope'},
+  {id:'quantum',    name:'Quantum',     arr:760000, days:50, risk:'high', signals:'40% user turnover · Retraining needed · New team unfamiliar with product'},
+  // MEDIUM
+  {id:'ironvault',  name:'Ironvault',   arr:290000, days:60,  risk:'medium', signals:'Some feature gaps · Quarterly health check needed · Moderate usage'},
+  {id:'helix',      name:'Helix',       arr:110000, days:130, risk:'medium', signals:'Expansion opportunity · Power user champion identified · Growing team'},
+  {id:'cascade',    name:'Cascade',     arr:70000,  days:90,  risk:'medium', signals:'Small team · Good NPS but limited feature usage · Upsell potential'},
+  // LOW / SAFE
+  {id:'datacore',   name:'DataCore',    arr:95000,  days:180, risk:'low', signals:'Healthy usage · Strong champion · Renewal likely'},
+  {id:'cloudbase',  name:'CloudBase',   arr:85000,  days:220, risk:'low', signals:'Top NPS in cohort · Expansion candidate · Reference customer'},
+  {id:'veritas',    name:'Veritas',     arr:55000,  days:300, risk:'low', signals:'Steady usage · Long-term customer · Low touch renewal'},
+  {id:'vertex',     name:'Vertex',      arr:95000,  days:200, risk:'low', signals:'Healthy adoption · Positive feedback · Stable account'},
+];
+
+// ── DATA SOURCES ──
+const SOURCES = [
+  {id:'crm',       label:'CRM',              emoji:'🗂️', color:'#00aaff'},
+  {id:'product',   label:'Product Analytics', emoji:'📊', color:'#00ff88'},
+  {id:'support',   label:'Support Tickets',   emoji:'🎫', color:'#ff4444'},
+  {id:'nps',       label:'NPS / Feedback',    emoji:'💬', color:'#aa44ff'},
+  {id:'financial', label:'Financial',         emoji:'💰', color:'#ffd700'},
+];
+
+// ── TOOLS ──
+const TOOLS = [
+  {name:'scan_accounts',description:'Scan the portfolio for accounts matching your risk specialty. Returns at-risk accounts with key signals.',input_schema:{type:'object',properties:{signal_type:{type:'string',description:'Type of risk signal matching your specialty'},min_risk:{type:'string',enum:['medium','high','critical']}},required:['signal_type']}},
+  {name:'pull_account_data',description:'Pull detailed data from a specific source for an account.',input_schema:{type:'object',properties:{account_id:{type:'string',description:'Account ID from ACCOUNTS list'},source:{type:'string',enum:['crm','product','support','nps','financial']},reason:{type:'string'}},required:['account_id','source']}},
+  {name:'assess_risk',description:'Synthesize gathered data into a formal risk assessment.',input_schema:{type:'object',properties:{account_id:{type:'string'},risk_level:{type:'string',enum:['low','medium','high','critical']},root_cause:{type:'string',description:'Primary reason for risk level'},confidence:{type:'number',description:'0-100 confidence score'}},required:['account_id','risk_level','root_cause','confidence']}},
+  {name:'create_escalation',description:'Create a formal escalation with recovery plan for an at-risk account.',input_schema:{type:'object',properties:{account_id:{type:'string'},severity:{type:'string',enum:['P1','P2','P3']},summary:{type:'string'},recovery_plan:{type:'string',description:'Specific steps to save this account'},arr_at_risk:{type:'number'}},required:['account_id','severity','summary','recovery_plan','arr_at_risk']}},
+  {name:'assign_action',description:'Assign a specific recovery action item to the account.',input_schema:{type:'object',properties:{account_id:{type:'string'},action:{type:'string',description:'Specific action to take'},owner:{type:'string',description:'Who should own this action'},due_days:{type:'number'}},required:['account_id','action','owner','due_days']}},
+];
+
+// ── AGD (Agent Game Data) ──
+const AGD = {};
+function initAGD(ag){
+  AGD[ag.id]={
+    b:500, spent:0, stamina:ag.maxStam,
+    arrProtected:0, decisions:[], escalations:[],
+    assessments:{}, srcVisited:new Set(),
+    kpi:{cal:0,esc:0,assess:0},
+    revenueHistory:[0], status:'idle', _lastThought:'',
+  };
+}
+
+// ── RATE LIMITER ──
+const _q=[];let _lastCall=0;
+let _tRunning=false,_tq=[];
+function acquireSlot(){return new Promise(r=>{_q.push(r);if(_q.length===1)drainQ();});}
+function drainQ(){
+  if(!_q.length)return;
+  if(missionPaused){setTimeout(drainQ,300);return;}
+  const w=Math.max(0,2200-(Date.now()-_lastCall));
+  setTimeout(()=>{_lastCall=Date.now();const r=_q.shift();r();drainQ();},w);
+}
+
+// ── SPEED / PAUSE ──
+let SPEED_MULT=1.0,missionPaused=false;
+function setSpeed(s){
+  SPEED_MULT=s;
+  ['05','1','2'].forEach(x=>{
+    const el=document.getElementById('spd-'+x);
+    const m=(x==='05'&&s===0.5)||(x==='1'&&s===1)||(x==='2'&&s===2);
+    if(el){el.style.borderColor=m?'rgba(6,182,212,0.4)':'rgba(0,255,136,0.12)';el.style.color=m?'#00ff88':'#4a7a5a';}
+  });
+}
+function togglePause(){
+  missionPaused=!missionPaused;
+  const btn=document.getElementById('pause-btn');
+  if(btn){btn.textContent=missionPaused?'▶ Resume':'⏸ Pause';btn.style.borderColor=missionPaused?'rgba(255,215,0,0.4)':'rgba(0,255,136,0.12)';btn.style.color=missionPaused?'#ffd700':'#4a7a5a';}
+  const ti=document.getElementById('ticker-inner');
+  if(ti){ti.getAnimations().forEach(a=>missionPaused?a.pause():a.play());}
+}
+async function sleep(ms){
+  await new Promise(r=>setTimeout(r,Math.max(80,ms/SPEED_MULT)));
+  while(missionPaused){await new Promise(r=>setTimeout(r,120));}
+}
+
+// ── TICKER ──
+let _leaderArr=0,_totalEscArr=0;
+function showEvent(icon,title,sub,color){
+  _tq.push({icon,title,sub,color});
+  const hist=document.getElementById('ticker-history');
+  if(hist){
+    const pill=document.createElement('span');pill.className='ticker-pill';
+    pill.style.cssText='color:'+color+';border-color:'+color+'44;background:'+color+'11';
+    pill.title=title+(sub?' — '+sub:'');
+    pill.textContent=icon+' '+title.substring(0,16)+(title.length>16?'…':'');
+    hist.appendChild(pill);
+    while(hist.children.length>5)hist.removeChild(hist.firstChild);
+  }
+  if(!_tRunning)_runTicker();
+}
+function _runTicker(){
+  if(!_tq.length){_tRunning=false;return;}
+  _tRunning=true;
+  const ev=_tq.shift();
+  const inner=document.getElementById('ticker-inner');
+  const track=document.querySelector('.ticker-track');
+  if(!inner||!track){setTimeout(_runTicker,500);return;}
+  inner.getAnimations().forEach(a=>a.cancel());
+  inner.innerHTML='<span style="font-size:13px;margin-right:8px">'+ev.icon+'</span>'
+    +'<span style="color:'+ev.color+';font-weight:700">'+ev.title+'</span>'
+    +(ev.sub?'<span style="color:#4a7a5a;font-weight:400;margin-left:10px">— '+ev.sub+'</span>':'');
+  requestAnimationFrame(()=>{
+    const tw=track.offsetWidth,ew=inner.offsetWidth||400;
+    const anim=inner.animate([{left:(tw+20)+'px'},{left:(-(ew+20))+'px'}],{duration:((tw+ew+40)/110)*1000,easing:'linear',fill:'forwards'});
+    anim.onfinish=()=>setTimeout(_runTicker,300);
+  });
+}
+
+// ── LOG ──
+function addLog(txt,cls){
+  const log=document.getElementById('log');if(!log)return;
+  const d=document.createElement('div');d.className='ll '+(cls||'lm');d.textContent=txt;
+  log.appendChild(d);while(log.children.length>200)log.removeChild(log.firstChild);
+  requestAnimationFrame(()=>{log.scrollTop=log.scrollHeight;});
+}
+function clearLog(){const l=document.getElementById('log');if(l)l.innerHTML='';}
+
+// ── AGENT CARDS ──
+function buildAgentCards(){
+  const wrap=document.getElementById('agents-wrap');if(!wrap)return;
+  wrap.innerHTML='';
+  AGENTS.forEach(ag=>{
+    const s=AGD[ag.id];
+    const rgb=hexRgb(ag.color);const cr=rgb[0],cg=rgb[1],cb=rgb[2];
+    const div=document.createElement('div');div.className='ac';div.id='ac-'+ag.id;
+    div.style.cssText=`background:rgba(${cr},${cg},${cb},0.05);border:1px solid rgba(${cr},${cg},${cb},0.2)`;
+    div.innerHTML=`
+      <div class="ac-hdr">
+        <span class="ac-emoji">${ag.emoji}</span>
+        <div><div class="ac-name" style="color:${ag.color}">${ag.name}</div><div class="ac-role">${ag.role}</div></div>
+        <div style="margin-left:auto;text-align:right"><div class="ac-arr" style="color:${s.arrProtected>0?ag.color:'#4a7a5a'}">${s.arrProtected>0?'$'+(s.arrProtected/1000).toFixed(0)+'k':'—'}</div><div class="ac-calls">${s.kpi.cal} calls</div></div>
+      </div>
+      <div class="ac-state" id="acs-${ag.id}">Idle</div>
+      <div class="bar-row"><span>Budget</span><span>$${s.spent}/$${s.b}</span></div>
+      <div class="bar"><div class="bar-fill" id="bb-${ag.id}" style="width:${Math.min(100,s.spent/s.b*100)}%;background:${ag.color}"></div></div>
+      <div class="bar-row"><span>Stamina</span><span>${Math.max(0,s.stamina)}/${ag.maxStam}</span></div>
+      <div class="bar"><div class="bar-fill" id="sb-${ag.id}" style="width:${Math.max(0,s.stamina/ag.maxStam*100)}%;background:${ag.color}"></div></div>
+      <div class="esc-pills" id="ep-${ag.id}"></div>
+      <div class="dec-log" id="dl-${ag.id}"></div>`;
+    wrap.appendChild(div);
+  });
+}
+
+function updateCard(who){
+  const ag=AGENTS.find(a=>a.id===who);if(!ag)return;
+  const s=AGD[who];
+  const pct=Math.min(100,Math.round(s.spent/s.b*100));
+  const stPct=Math.max(0,Math.round(s.stamina/ag.maxStam*100));
+  const bbEl=document.getElementById('bb-'+who);if(bbEl)bbEl.style.width=pct+'%';
+  const sbEl=document.getElementById('sb-'+who);if(sbEl)sbEl.setAttribute('style','height:100%;width:'+stPct+'%;background:'+ag.color+';border-radius:2px;transition:width .5s');
+  const arrEl=document.querySelector('#ac-'+who+' .ac-arr');if(arrEl){arrEl.textContent=s.arrProtected>0?'$'+(s.arrProtected/1000).toFixed(0)+'k':'—';arrEl.style.color=s.arrProtected>0?ag.color:'#4a7a5a';}
+  const callEl=document.querySelector('#ac-'+who+' .ac-calls');if(callEl)callEl.textContent=s.kpi.cal+' calls';
+  // Escalation pills
+  const epEl=document.getElementById('ep-'+who);
+  if(epEl){
+    epEl.innerHTML=s.escalations.map(e=>{
+      const sc=e.severity==='P1'?'sev-p1':e.severity==='P2'?'sev-p2':'sev-p3';
+      return`<span class="epill ${sc}" style="border-color:${e.severity==='P1'?'#ff4444':e.severity==='P2'?'#ff8800':'#ffd700'}44">${e.severity} ${ACCOUNTS.find(a=>a.id===e.accountId)?.name||e.accountId}</span>`;
+    }).join('');
+  }
+  // Rev badge
+  const badge=document.getElementById('rev-badge');
+  if(badge){
+    const tot=AGENTS.reduce((sum,a)=>sum+(AGD[a.id].arrProtected||0),0);
+    if(tot>0){badge.style.display='block';badge.textContent='$'+(tot/1000).toFixed(0)+'k ARR Protected';}
+  }
+}
+
+function logDec(who,type,text,thought){
+  const s=AGD[who];
+  const n=new Date();
+  const ts=n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0')+':'+n.getSeconds().toString().padStart(2,'0');
+  s.decisions.push({ts,type,text,thought:thought||''});
+  const dl=document.getElementById('dl-'+who);if(!dl)return;
+  const d=document.createElement('div');d.className='dec-e';
+  const tc={scan:'#00ffdd',pull:'#60a5fa',assess:'#ffd700',escalate:'#ff4444',action:'#4aff9a',plan:'#aa44ff',err:'#ff4444'}[type]||'#4a7a5a';
+  d.innerHTML=`<span class="dec-ts">${ts.slice(-5)}</span><span class="dec-tx" style="color:${tc}">${text.substring(0,40)}</span>`;
+  dl.appendChild(d);
+  while(dl.children.length>8)dl.removeChild(dl.firstChild);
+  dl.scrollTop=dl.scrollHeight;
+}
+
+function setState(who,txt){
+  const el=document.getElementById('acs-'+who);if(el)el.textContent=txt;
+}
+
+// ── HELPER ──
+function hexRgb(hex){
+  hex=hex.replace('#','');
+  if(hex.length===3)hex=hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+  return[parseInt(hex.substring(0,2),16),parseInt(hex.substring(2,4),16),parseInt(hex.substring(4,6),16)];
+}
+
+// ── RISK RADAR VISUALIZATION ──
+let rsvg,rsvgG,W,H,rInner,accountPositions={};
+const RISK_RADII={critical:55,high:120,medium:170,low:205};
+const ZONE_COLS={critical:'rgba(255,68,68,',high:'rgba(255,136,0,',medium:'rgba(255,215,0,',low:'rgba(6,182,212,'};
+const RISK_COLS={critical:'#ff4444',high:'#ff8800',medium:'#ffd700',low:'#00ff88'};
+
+function initRadar(){
+  const wrap=document.getElementById('gwrap');
+  const rect=wrap.getBoundingClientRect();
+  W=rect.width||600;H=rect.height||400;
+  rsvg=d3.select('#risk-svg').attr('width',W).attr('height',H);
+  rsvg.selectAll('*').remove();
+  const cx=W/2,cy=H/2;
+  rInner=Math.min(cx,cy)*0.9;
+  rsvgG=rsvg.append('g').attr('transform',`translate(${cx},${cy})`);
+
+  // Zone rings
+  const zones=[
+    {r:RISK_RADII.low/210*rInner,col:ZONE_COLS.low,label:'SAFE ZONE',lCol:'#00ff88'},
+    {r:RISK_RADII.medium/210*rInner,col:ZONE_COLS.medium,label:'MEDIUM RISK',lCol:'#ffd700'},
+    {r:RISK_RADII.high/210*rInner,col:ZONE_COLS.high,label:'HIGH RISK',lCol:'#ff8800'},
+    {r:RISK_RADII.critical/210*rInner,col:ZONE_COLS.critical,label:'CRITICAL ZONE',lCol:'#ff4444'},
+  ];
+  zones.forEach(z=>{
+    rsvgG.append('circle').attr('r',z.r).attr('fill',z.col+'0.06)').attr('stroke',z.col+'0.2)').attr('stroke-width',1);
+    rsvgG.append('text').attr('x',0).attr('y',-(z.r-8)).attr('text-anchor','middle').attr('font-family','JetBrains Mono').attr('font-size','8px').attr('fill',z.lCol).attr('opacity',0.5).attr('letter-spacing','0.08em').text(z.label);
+  });
+
+  // Spoke lines
+  for(let i=0;i<12;i++){
+    const a=(i/12)*2*Math.PI-Math.PI/2;
+    rsvgG.append('line').attr('x1',0).attr('y1',0)
+      .attr('x2',Math.cos(a)*rInner*1.02).attr('y2',Math.sin(a)*rInner*1.02)
+      .attr('stroke','rgba(6,182,212,0.04)').attr('stroke-width',0.5);
+  }
+
+  // Particles (background)
+  initParticles();
+
+  // Place accounts
+  placeAccounts();
+}
+
+function placeAccounts(){
+  if(!rsvgG)return;
+  rsvgG.selectAll('.acct-group').remove();
+
+  // Sort accounts by ARR descending for angle assignment
+  const sorted=[...ACCOUNTS].sort((a,b)=>b.arr-a.arr);
+
+  sorted.forEach((acct,i)=>{
+    const angle=(i/ACCOUNTS.length)*2*Math.PI-Math.PI/2;
+    const baseR=RISK_RADII[acct.risk]/210*rInner;
+    const jitter=(Math.random()-0.5)*15;
+    const r=baseR+jitter;
+    const x=Math.cos(angle)*r;
+    const y=Math.sin(angle)*r;
+    accountPositions[acct.id]={x,y,angle,r};
+
+    const nodeR=Math.max(8,Math.min(22,Math.sqrt(acct.arr/8000)));
+    const col=RISK_COLS[acct.risk];
+    const rgb=hexRgb(col);
+
+    const g=rsvgG.append('g').attr('class','acct-group').attr('id','acg-'+acct.id)
+      .attr('transform',`translate(${x},${y})`).style('cursor','pointer');
+
+    // Glow
+    g.append('circle').attr('r',nodeR+4).attr('class','acct-glow-'+acct.id)
+      .attr('fill',`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.08)`).attr('stroke','none');
+
+    // Main circle
+    g.append('circle').attr('r',nodeR).attr('class','acct-circle-'+acct.id)
+      .attr('fill',`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.18)`)
+      .attr('stroke',col).attr('stroke-width',1.5);
+
+    // ARR label inside
+    if(acct.arr>=200000){
+      g.append('text').attr('text-anchor','middle').attr('dominant-baseline','middle')
+        .attr('font-family','JetBrains Mono').attr('font-size','7px').attr('font-weight','700')
+        .attr('fill',col).text('$'+(acct.arr/1000).toFixed(0)+'k');
+    }
+
+    // Account name label
+    const labelAngle=Math.atan2(y,x);
+    const labelDist=nodeR+10;
+    const lx=Math.cos(labelAngle)*labelDist;
+    const ly=Math.sin(labelAngle)*labelDist;
+    g.append('text').attr('x',lx>0?lx:lx).attr('y',ly)
+      .attr('text-anchor',lx>0?'start':'end')
+      .attr('dominant-baseline','middle')
+      .attr('font-family','JetBrains Mono').attr('font-size','8px')
+      .attr('fill',col).attr('opacity',0.8).text(acct.name);
+  });
+}
+
+function pulseAccount(accountId,color){
+  const pos=accountPositions[accountId];if(!pos||!rsvgG)return;
+  const rgb=hexRgb(color);
+  for(let i=0;i<3;i++){
+    const ring=rsvgG.append('circle').attr('class','pulse-'+accountId)
+      .attr('cx',pos.x).attr('cy',pos.y)
+      .attr('r',15).attr('fill','none')
+      .attr('stroke',`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.8)`).attr('stroke-width',2);
+    ring.transition().delay(i*150).duration(800)
+      .attr('r',35).attr('stroke-width',0).attr('stroke-opacity',0)
+      .remove();
+  }
+}
+
+function agentBeam(agentId,accountId,color){
+  const pos=accountPositions[accountId];if(!pos||!rsvgG)return;
+  const rgb=hexRgb(color);
+  const line=rsvgG.append('line').attr('class','beam-'+agentId)
+    .attr('x1',0).attr('y1',0).attr('x2',pos.x).attr('y2',pos.y)
+    .attr('stroke',`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.4)`)
+    .attr('stroke-width',1.5).attr('stroke-dasharray','4,3');
+  setTimeout(()=>line.remove(),2500);
+}
+
+function escalateAccount(accountId){
+  // Animate account moving toward outer safe zone
+  const pos=accountPositions[accountId];if(!pos||!rsvgG)return;
+  const acct=ACCOUNTS.find(a=>a.id===accountId);if(!acct)return;
+  const newR=RISK_RADII.low/210*rInner*(0.85+Math.random()*0.15);
+  const newX=Math.cos(pos.angle)*newR;
+  const newY=Math.sin(pos.angle)*newR;
+  // Update circle color to safe green
+  const g=d3.select('#acg-'+accountId);
+  if(!g.empty()){
+    g.select('.acct-circle-'+accountId).transition().duration(1500)
+      .attr('stroke','#00ff88').attr('fill','rgba(6,182,212,0.18)');
+    g.select('text').transition().duration(1500).attr('fill','#00ff88');
+    g.transition().duration(2000).attr('transform',`translate(${newX},${newY})`);
+  }
+  accountPositions[accountId]={...pos,x:newX,y:newY,r:newR};
+}
+
+// ── RENEWAL URGENCY TIMELINE ──
+let tlSvg=null;
+function initTimeline(){
+  const wrap=document.getElementById('timeline-wrap');if(!wrap)return;
+  const rect=wrap.getBoundingClientRect();
+  const TW=rect.width>50?rect.width:(wrap.offsetWidth>50?wrap.offsetWidth:window.innerWidth*0.46);
+  const TH=rect.height>50?rect.height:(wrap.offsetHeight>50?wrap.offsetHeight:window.innerHeight*0.42);
+  if(TW<50||TH<50){setTimeout(initTimeline,400);return;}
+  tlSvg=d3.select('#timeline-svg').attr('width',TW).attr('height',TH);
+  tlSvg.selectAll('*').remove();
+
+  const ML=88,MR=14,MT=26,MB=16;
+  const iW=TW-ML-MR, iH=TH-MT-MB;
+  const g=tlSvg.append('g').attr('transform','translate('+ML+','+MT+')');
+
+  const sorted=[...ACCOUNTS].sort((a,b)=>a.days-b.days);
+  const maxDays=310;
+  const xSc=d3.scaleLinear().domain([0,maxDays]).range([0,iW]);
+  const ySc=d3.scaleBand().domain(sorted.map(a=>a.id)).range([0,iH]).padding(0.22);
+
+  // Urgency zone fills
+  g.append('rect').attr('x',0).attr('y',0).attr('width',xSc(30)).attr('height',iH).attr('fill','rgba(255,68,68,0.06)');
+  g.append('rect').attr('x',xSc(30)).attr('y',0).attr('width',xSc(60)-xSc(30)).attr('height',iH).attr('fill','rgba(255,136,0,0.04)');
+  g.append('rect').attr('x',xSc(60)).attr('y',0).attr('width',xSc(90)-xSc(60)).attr('height',iH).attr('fill','rgba(255,215,0,0.03)');
+
+  // Deadline lines + labels
+  [{d:30,c:'rgba(255,68,68,0.4)',t:'30d'},{d:60,c:'rgba(255,136,0,0.25)',t:'60d'},{d:90,c:'rgba(255,255,255,0.1)',t:'90d'}].forEach(z=>{
+    g.append('line').attr('x1',xSc(z.d)).attr('x2',xSc(z.d)).attr('y1',0).attr('y2',iH)
+      .attr('stroke',z.c).attr('stroke-dasharray','3,3').attr('stroke-width',1);
+    g.append('text').attr('x',xSc(z.d)+3).attr('y',-7)
+      .attr('font-family','JetBrains Mono').attr('font-size','8px').attr('fill',z.c).text(z.t);
+  });
+  g.append('text').attr('x',xSc(15)).attr('y',-7).attr('text-anchor','middle')
+    .attr('font-family','JetBrains Mono').attr('font-size','8px').attr('fill','rgba(255,68,68,0.55)').text('CRITICAL');
+
+  // Bars
+  sorted.forEach(acct=>{
+    const col=RISK_COLS[acct.risk]||'#4a7a5a';
+    const rgb=hexRgb(col);
+    const bH=ySc.bandwidth();
+    const bH2=Math.max(5,Math.min(bH, 5+Math.sqrt(acct.arr/20000)));
+    const y=ySc(acct.id)+(bH-bH2)/2;
+
+    // Track full-width ghost
+    g.append('rect').attr('x',0).attr('y',y).attr('width',iW).attr('height',bH2)
+      .attr('fill','rgba(255,255,255,0.025)').attr('rx',2);
+
+    // Main bar
+    g.append('rect').attr('id','tbar-'+acct.id)
+      .attr('x',0).attr('y',y)
+      .attr('width',xSc(Math.min(acct.days,maxDays))).attr('height',bH2)
+      .attr('fill','rgba('+rgb[0]+','+rgb[1]+','+rgb[2]+',0.3)')
+      .attr('stroke',col).attr('stroke-width',1).attr('rx',2);
+
+    // Account name (left)
+    g.append('text').attr('x',-5).attr('y',y+bH2/2)
+      .attr('text-anchor','end').attr('dominant-baseline','middle')
+      .attr('font-family','JetBrains Mono').attr('font-size','8px').attr('fill',col)
+      .text(acct.name.length>11?acct.name.substring(0,10)+'…':acct.name);
+
+    // Days + ARR label (right of bar)
+    g.append('text').attr('id','tlbl-'+acct.id)
+      .attr('x',xSc(Math.min(acct.days,maxDays))+4).attr('y',y+bH2/2)
+      .attr('dominant-baseline','middle')
+      .attr('font-family','JetBrains Mono').attr('font-size','7px').attr('fill',col)
+      .text(acct.days+'d · $'+(acct.arr/1000).toFixed(0)+'k');
+  });
+}
+
+function updateTimelineEscalation(accountId){
+  if(!tlSvg)return;
+  tlSvg.select('#tbar-'+accountId).transition().duration(1000)
+    .attr('fill','rgba(0,255,136,0.25)').attr('stroke','#00ff88');
+  tlSvg.select('#tlbl-'+accountId).attr('fill','#00ff88')
+    .text('✓ escalated');
+}
+
+// ── PARTICLES ──
+var _bgRAF=null;
+function initParticles(){
+  if(!rsvgG)return;
+  if(_bgRAF)cancelAnimationFrame(_bgRAF);
+  d3.select('#ptcl-group').remove();
+  const pG=rsvgG.insert('g',':first-child').attr('id','ptcl-group');
+  const hw=W/2,hh=H/2;
+  const pts=[];
+  for(let i=0;i<50;i++){
+    pts.push({
+      x:(Math.random()-0.5)*W*0.9,y:(Math.random()-0.5)*H*0.9,
+      vx:(Math.random()-0.5)*0.35,vy:(Math.random()-0.5)*0.35,
+      col:Math.random()<0.5?'#00ff88':'#ea580c'
+    });
+  }
+  const circles=pts.map(p=>pG.append('circle').attr('r',1.4).attr('fill',p.col).attr('opacity',0.45));
+  const lines=[];
+  for(let i=0;i<pts.length;i++){
+    for(let j=i+1;j<pts.length;j++){
+      lines.push({i,j,el:pG.append('line').attr('stroke','#00ff88').attr('stroke-width',0.5).attr('opacity',0)});
+    }
+  }
+  function tick(){
+    for(let i=0;i<pts.length;i++){
+      const p=pts[i];p.x+=p.vx;p.y+=p.vy;
+      if(p.x<-hw||p.x>hw)p.vx*=-1;if(p.y<-hh||p.y>hh)p.vy*=-1;
+      circles[i].attr('cx',p.x).attr('cy',p.y).attr('opacity',0.3);
+    }
+    for(let k=0;k<lines.length;k++){
+      const l=lines[k],a=pts[l.i],b=pts[l.j];
+      const dx=a.x-b.x,dy=a.y-b.y,d=Math.sqrt(dx*dx+dy*dy);
+      if(d<100){l.el.attr('x1',a.x).attr('y1',a.y).attr('x2',b.x).attr('y2',b.y).attr('opacity',0.1*(1-d/100));}
+      else{l.el.attr('opacity',0);}
+    }
+    _bgRAF=requestAnimationFrame(tick);
+  }
+  tick();
+}
+
+// ── TOOL EXECUTOR ──
+async function execTool(who,toolName,inp){
+  const ag=AGENTS.find(a=>a.id===who);
+  const s=AGD[who];
+  const acct=inp.account_id?ACCOUNTS.find(a=>a.id===inp.account_id):null;
+  const acctName=acct?acct.name:inp.account_id||'';
+
+  if(toolName==='scan_accounts'){
+    const cost=5;
+    if(s.spent+cost>s.b)return{ok:false,reason:'budget'};
+    s.spent+=cost;s.stamina=Math.max(0,s.stamina-ag.costHop);
+    setState(who,'Scanning portfolio…');
+    logDec(who,'scan','Scanning for: '+inp.signal_type,s._lastThought);
+    addLog(ag.name+' scans portfolio — '+inp.signal_type,'lb');
+    await sleep(800);
+    // Return relevant accounts based on signal
+    const riskAccounts=ACCOUNTS.filter(a=>a.risk==='critical'||a.risk==='high').slice(0,5);
+    return{ok:true,accounts:riskAccounts.map(a=>({id:a.id,name:a.name,arr:a.arr,days:a.days,risk:a.risk,signals:a.signals}))};
+  }
+
+  if(toolName==='pull_account_data'){
+    const cost=8;
+    if(!acct)return{ok:false,reason:'account not found'};
+    if(s.spent+cost>s.b)return{ok:false,reason:'budget'};
+    s.spent+=cost;s.stamina=Math.max(0,s.stamina-ag.costHop);
+    s.srcVisited.add(inp.source);
+    setState(who,'Pulling '+inp.source+' for '+acctName);
+    logDec(who,'pull','→ '+acctName+' / '+inp.source,s._lastThought);
+    addLog(ag.name+' → '+acctName+' ['+inp.source+']','lm');
+    agentBeam(who,acct.id,ag.color);
+    pulseAccount(acct.id,SOURCES.find(s=>s.id===inp.source)?.color||ag.color);
+    await sleep(1000);
+    // Generate contextual data response
+    const dataMap={
+      crm:`${acctName}: Contract value $${(acct.arr/1000).toFixed(0)}k, renewal ${acct.days} days. ${acct.signals}.`,
+      product:`${acctName}: ${acct.risk==='critical'?'Usage dropped significantly, session frequency declining':'Moderate usage patterns'}.`,
+      support:`${acctName}: ${acct.risk==='critical'?'Multiple open tickets, CSAT declining':'Normal ticket volume'}.`,
+      nps:`${acctName}: NPS ${acct.risk==='critical'?'2-4 (Detractor zone)':acct.risk==='high'?'5-6 (Passive)':'7-9 (Promoter)'}. ${acct.signals}`,
+      financial:`${acctName}: ARR $${(acct.arr/1000).toFixed(0)}k. ${acct.risk==='critical'?'Payment delays or budget review in progress':'Payment healthy'}. Renewal risk: ${acct.risk}.`,
+    };
+    return{ok:true,data:dataMap[inp.source]||acct.signals};
+  }
+
+  if(toolName==='assess_risk'){
+    const cost=10;
+    if(!acct)return{ok:false,reason:'account not found'};
+    if(s.spent+cost>s.b)return{ok:false,reason:'budget'};
+    s.spent+=cost;s.stamina=Math.max(0,s.stamina-ag.costHop);
+    s.assessments[acct.id]={risk_level:inp.risk_level,root_cause:inp.root_cause};
+    setState(who,'Assessing '+acctName);
+    s.kpi.assess++;
+    const col=RISK_COLS[inp.risk_level]||ag.color;
+    logDec(who,'assess',acctName+' → '+inp.risk_level.toUpperCase()+' ('+inp.confidence+'%)',s._lastThought);
+    addLog(ag.name+' assesses '+acctName+': '+inp.risk_level.toUpperCase(),'ly');
+    pulseAccount(acct.id,col);
+    showEvent('🔍',ag.name+' assesses '+acctName,inp.risk_level.toUpperCase()+' — '+inp.root_cause.substring(0,35),col);
+    await sleep(800);
+    return{ok:true,assessment:{account:acctName,risk:inp.risk_level,root_cause:inp.root_cause,confidence:inp.confidence}};
+  }
+
+  if(toolName==='create_escalation'){
+    const cost=20;
+    if(!acct)return{ok:false,reason:'account not found'};
+    if(s.spent+cost>s.b)return{ok:false,reason:'budget'};
+    // Check not already escalated
+    const alreadyEsc=AGENTS.some(a=>AGD[a.id].escalations.some(e=>e.accountId===acct.id));
+    if(alreadyEsc)return{ok:false,reason:'already escalated by another agent'};
+    // Null guards — Claude sometimes omits optional fields
+    const escSummary=inp.summary||'Account at critical risk — immediate intervention required';
+    const escPlan=inp.recovery_plan||'Schedule executive call, assign dedicated CSM, review product roadmap alignment, address open support issues';
+    const escSev=inp.severity||'P2';
+    s.spent+=cost;s.stamina=Math.max(0,s.stamina-ag.costHop);
+    s.kpi.esc++;
+    const arrVal=inp.arr_at_risk||acct.arr;
+    s.arrProtected+=arrVal;
+    s.revenueHistory.push(s.arrProtected);
+    s.escalations.push({accountId:acct.id,severity:escSev,summary:escSummary,plan:escPlan,arr:arrVal});
+    _totalEscArr+=arrVal;
+    setState(who,inp.severity+' — '+acctName);
+    const sevCol=escSev==='P1'?'#ef4444':escSev==='P2'?'#f97316':'#eab308';
+    logDec(who,'escalate',escSev+' '+acctName+' $'+(arrVal/1000).toFixed(0)+'k',s._lastThought);
+    addLog(ag.name+' ESCALATES '+acctName+' '+escSev+' — $'+(arrVal/1000).toFixed(0)+'k ARR','le');
+    pulseAccount(acct.id,sevCol);
+    escalateAccount(acct.id);
+    updateTimelineEscalation(acct.id);
+    // Update escalation feed
+    addEscFeedItem(ag,acct,{severity:escSev,summary:escSummary,recovery_plan:escPlan,arr_at_risk:arrVal},sevCol);
+    updateCard(who);
+    // Ticker
+    showEvent(escSev==='P1'?'🚨':'⚠️',escSev+' '+acctName,'$'+(arrVal/1000).toFixed(0)+'k ARR — '+escSummary.substring(0,40),sevCol);
+    // Milestones
+    if(_totalEscArr>=1000000&&_totalEscArr-arrVal<1000000)showEvent('🛡️','$1M ARR Protected!','escalation coverage milestone',ag.color);
+    if(_totalEscArr>=2000000&&_totalEscArr-arrVal<2000000)showEvent('🔥','$2M ARR Protected!','major milestone reached',ag.color);
+    // Update KPIs
+    updateKPIs();
+    await sleep(800);
+    return{ok:true,escalation:{account:acctName,severity:inp.severity,arr_protected:arrVal}};
+  }
+
+  if(toolName==='assign_action'){
+    const cost=5;
+    if(s.spent+cost>s.b)return{ok:false,reason:'budget'};
+    s.spent+=cost;
+    setState(who,'Action → '+acctName);
+    logDec(who,'action',inp.action.substring(0,40)+' ('+inp.owner+', '+inp.due_days+'d)',s._lastThought);
+    addLog(ag.name+' → '+acctName+': '+inp.action.substring(0,45),'lb');
+    await sleep(500);
+    return{ok:true,action_created:true};
+  }
+
+  return{ok:false,reason:'unknown tool'};
+}
+
+function addEscFeedItem(ag,acct,inp,sevCol){
+  const feed=document.getElementById('esc-feed');if(!feed)return;
+  const empty=feed.querySelector('[style*="No escalations"]');if(empty)empty.remove();
+  const div=document.createElement('div');
+  div.className='esc-item';
+  div.style.cssText='border-left-color:'+sevCol+';background:rgba('+hexRgb(sevCol).join(',')+',0.05)';
+  div.innerHTML=`<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+    <span style="font-size:13px">${ag.emoji}</span>
+    <span class="esc-acct" style="color:${sevCol}">${acct.name}</span>
+    <span class="esc-sev ${inp.severity==='P1'?'sev-p1':inp.severity==='P2'?'sev-p2':'sev-p3'}" style="margin-left:auto;background:${sevCol}22">${inp.severity}</span>
+    <span class="esc-arr" style="color:#00ff88">$${(inp.arr_at_risk/1000).toFixed(0)}k</span>
+  </div>
+  <div class="esc-plan">${inp.recovery_plan.substring(0,90)}${inp.recovery_plan.length>90?'…':''}</div>`;
+  feed.insertBefore(div,feed.firstChild);
+}
+
+function updateKPIs(){
+  const totalEscs=AGENTS.reduce((s,ag)=>s+AGD[ag.id].escalations.length,0);
+  const totalProt=AGENTS.reduce((s,ag)=>s+(AGD[ag.id].arrProtected||0),0);
+  const el=document.getElementById('kpi-esc');if(el)el.textContent=totalEscs;
+  const el2=document.getElementById('kpi-prot');if(el2)el2.textContent='$'+(totalProt/1000).toFixed(0)+'k';
+  const el3=document.getElementById('rev-badge');if(el3&&totalProt>0){el3.style.display='block';el3.textContent='$'+(totalProt/1000).toFixed(0)+'k ARR Protected';}
+  // status line removed — info shown in radar label area
+}
+
+// ── AGENT RUNNER ──
+async function runAgent(who){
+  const ag=AGENTS.find(a=>a.id===who);if(!ag)return;
+  const s=AGD[who];
+  s.status='running';
+  const budg=s.b;
+  const sys=`You are ${ag.name}, ${ag.role} in a B2B SaaS Customer Success team.
+Portfolio: 20 accounts, $5.7M total ARR, $4.2M at risk. You have $${budg} budget.
+Your specialty: ${ag.specialty}
+Critical accounts (renewal <30 days): TechVision, NovaSoft, Skylab, Pinnacle, Nexgen, Apexus
+High risk accounts: Acme Corp, Meridian, PrimeEdge, Cortex, Stratos, Polaris, Quantum
+
+MISSION: Protect ARR. Steps: 1)scan_accounts to find your highest-risk accounts 2)pull_account_data from 2 relevant sources per account 3)assess_risk with specific root cause 4)create_escalation for HIGH and CRITICAL accounts with detailed recovery_plan 5)assign_action with specific recovery steps 6)Repeat for more accounts until budget runs out.
+
+Be specific in summaries and recovery plans. Focus on accounts with most ARR at risk. Call tools immediately — no preamble.`;
+
+  const msgs=[{role:'user',content:'Begin your CS investigation. Find at-risk accounts and create escalation plans now.'}];
+  let iter=0;
+  while(iter++<30&&s.stamina>0&&s.spent<s.b){
+    await acquireSlot();
+    while(missionPaused){await new Promise(r=>setTimeout(r,150));}
+    s.kpi.cal++;updateCard(who);
+    // Safe trim: keep first user msg + last N, never start with non-user
+    let trim=msgs;
+    if(msgs.length>10){
+      const last=msgs.slice(-8);
+      let si=0;while(si<last.length&&last[si].role!=='user')si++;
+      trim=si>0?[msgs[0],...last.slice(si)]:[msgs[0],...last];
+    }
+    try{
+      const r=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':window._runtimeKey||API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:700,system:sys,tools:TOOLS,messages:trim})
+      });
+      if(!r.ok){
+        if(r.status===429){addLog(ag.name+' rate limited — waiting…','ly');await sleep(5000);continue;}
+        if(r.status===400){addLog(ag.name+' bad request — resetting context','le');msgs.splice(1);await sleep(1000);continue;}
+        addLog(ag.name+' API error '+r.status,'le');await sleep(3000);continue;
+      }
+      const data=await r.json();
+      const content=data.content||[];
+      const txt=content.filter(b=>b.type==='text').map(b=>b.text).join(' ').trim();
+      if(txt){addLog(ag.name+': '+txt.substring(0,55),'lm');s._lastThought=txt;}
+      msgs.push({role:'assistant',content});
+      const tus=content.filter(b=>b.type==='tool_use');
+      if(!tus.length||data.stop_reason==='end_turn')break;
+      const results=[];
+      for(const tu of tus){
+        const res=await execTool(who,tu.name,tu.input);
+        results.push({type:'tool_result',tool_use_id:tu.id,content:JSON.stringify(res)});
+      }
+      msgs.push({role:'user',content:results});
+    }catch(e){addLog(ag.name+' error: '+e.message,'le');await sleep(2000);}
+    await sleep(1200);
+  }
+  s.status='done';
+  setState(who,'✓ Mission complete');
+  addLog(ag.name+' done — $'+(s.arrProtected/1000).toFixed(0)+'k ARR protected','lb');
+  checkMissionComplete();
+}
+
+function checkMissionComplete(){
+  const allDone=AGENTS.every(ag=>AGD[ag.id].status==='done'||AGD[ag.id].stamina<=0||AGD[ag.id].spent>=AGD[ag.id].b);
+  if(allDone)setTimeout(showVictory,1500);
+}
+
+// ── VICTORY ──
+function showVictory(){
+  const totalArr=AGENTS.reduce((s,ag)=>s+(AGD[ag.id].arrProtected||0),0);
+  const totalEscs=AGENTS.reduce((s,ag)=>s+AGD[ag.id].escalations.length,0);
+  const totalCalls=AGENTS.reduce((s,ag)=>s+AGD[ag.id].kpi.cal,0);
+  document.getElementById('v-arr').textContent=(totalArr/1000).toFixed(0)+'k';
+  document.getElementById('v-esc').textContent=totalEscs;
+  document.getElementById('v-calls').textContent=totalCalls;
+
+  // Rankings
+  const ranked=[...AGENTS].sort((a,b)=>(AGD[b.id].arrProtected||0)-(AGD[a.id].arrProtected||0));
+  const medals=['🥇','🥈','🥉','4th','5th','6th','7th','8th'];
+  document.getElementById('v-ranking').innerHTML=ranked.map((ag,i)=>{
+    const s=AGD[ag.id];const arr=s.arrProtected||0;
+    const rgb=hexRgb(ag.color);
+    return'<div style="display:flex;align-items:center;gap:6px;padding:'+(i===0?7:4)+'px 8px;border-radius:6px;background:rgba('+rgb[0]+','+rgb[1]+','+rgb[2]+(i===0?',0.07':', 0.03')+');border:1px solid rgba('+rgb[0]+','+rgb[1]+','+rgb[2]+(i===0?',0.22':', 0.1')+');margin-bottom:4px;overflow:hidden">'
+      +'<span style="font-size:'+(i===0?14:11)+'px;flex-shrink:0">'+medals[i]+'</span>'
+      +'<span style="font-size:13px">'+ag.emoji+'</span>'
+      +'<span style="font-family:var(--mono);font-size:'+(i===0?11:9)+'px;font-weight:700;color:'+ag.color+';width:46px;flex-shrink:0">'+ag.name+'</span>'
+      +'<span style="font-size:8px;color:#4a7a5a;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ag.role+'</span>'
+      +'<span style="font-family:var(--mono);font-size:'+(i===0?10:9)+'px;font-weight:'+(i===0?700:400)+';color:'+(arr>0?'#00ff88':'#4a7a5a')+';flex-shrink:0">'+(arr>0?'$'+(arr/1000).toFixed(0)+'k':'—')+'</span>'
+      +'<span style="font-family:var(--mono);font-size:8px;color:#4a7a5a;flex-shrink:0;margin-left:4px">'+s.kpi.esc+' esc</span>'
+      +'</div>';
+  }).join('');
+
+  // Scorecards
+  document.getElementById('v-scorecards').innerHTML=ranked.map((ag,i)=>{
+    const s=AGD[ag.id];const arr=s.arrProtected||0;
+    const rgb=hexRgb(ag.color);
+    const pct=totalArr>0?Math.round(arr/totalArr*100):0;
+    const lastDec=s.decisions.slice(-3).map(d=>{
+      const col=d.type==='escalate'?'#ff4444':d.type==='assess'?'#ffd700':'#4a7a5a';
+      return'<div style="font-family:var(--mono);font-size:7px;padding:1px 0;color:'+col+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+d.ts.slice(-5)+' '+d.text.substring(0,22)+'</div>';
+    }).join('');
+    return'<div style="background:rgba('+rgb[0]+','+rgb[1]+','+rgb[2]+',0.05);border:1px solid rgba('+rgb[0]+','+rgb[1]+','+rgb[2]+',0.18);border-radius:7px;padding:8px 9px;overflow:hidden">'
+      +'<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px">'
+      +'<span style="font-size:12px">'+ag.emoji+'</span>'
+      +'<div style="min-width:0;flex:1">'
+      +'<div style="font-family:var(--mono);font-size:9px;font-weight:700;color:'+ag.color+';overflow:hidden;text-overflow:ellipsis">'+medals[i]+' '+ag.name+'</div>'
+      +'<div style="font-family:var(--mono);font-size:7px;color:#4a7a5a;overflow:hidden;text-overflow:ellipsis">'+ag.role+'</div>'
+      +'</div>'
+      +'<div style="font-family:var(--mono);font-size:10px;font-weight:700;color:'+(arr>0?ag.color:'#4a7a5a')+';flex-shrink:0">'+(arr>0?'$'+(arr/1000).toFixed(0)+'k':'—')+'</div>'
+      +'</div>'
+      +'<div style="height:3px;background:rgba(255,255,255,0.06);border-radius:2px;margin-bottom:5px">'
+      +'<div style="height:100%;width:'+pct+'%;background:'+ag.color+';border-radius:2px"></div></div>'
+      +'<div style="font-family:var(--mono);font-size:8px;color:#4a7a5a;line-height:1.7">'+s.kpi.esc+' escalations · '+s.kpi.cal+' API calls</div>'
+      +'<div style="margin-top:4px;overflow:hidden">'+lastDec+'</div>'
+      +'</div>';
+  }).join('');
+
+  const ov=document.getElementById('vov');
+  ov.style.opacity='1';ov.style.pointerEvents='all';
+}
+
+// ── START / RESET ──
+async function startMission(){
+  missionPaused=false;
+  const k=window._runtimeKey||API_KEY;
+  if(!k||k==='PASTE_YOUR_KEY_HERE'){alert('Enter your API key in the intro screen.');return;}
+  document.getElementById('bstart').disabled=true;
+  _totalEscArr=0;_leaderArr=0;
+  addLog('Mission started — 8 agents deploying…','lb');
+  showEvent('🚀','Mission started','8 CS agents scanning $5.7M portfolio','#00ff88');
+  AGENTS.forEach((ag,i)=>{
+    setTimeout(()=>runAgent(ag.id),i*1200);
+  });
+}
+
+function resetMission(){
+  _totalEscArr=0;_leaderArr=0;missionPaused=false;
+  const pb=document.getElementById('pause-btn');if(pb){pb.textContent='⏸ Pause';pb.style.color='#4a7a5a';pb.style.borderColor='rgba(0,255,136,0.12)';}
+  AGENTS.forEach(ag=>initAGD(ag));
+  buildAgentCards();
+  clearLog();document.getElementById('log').innerHTML='<div class="ll lm">Run agents to begin monitoring.</div>';
+  document.getElementById('kpi-esc').textContent='0';
+  document.getElementById('kpi-prot').textContent='$0';
+  document.getElementById('kpi-status').textContent='Waiting for agents to deploy…';
+  const feed=document.getElementById('esc-feed');if(feed)feed.innerHTML='<div style="font-size:10px;color:var(--dim);padding:8px 0;text-align:center">No escalations yet</div>';
+  const vov=document.getElementById('vov');if(vov){vov.style.opacity='0';vov.style.pointerEvents='none';}
+  const rb=document.getElementById('rev-badge');if(rb)rb.style.display='none';
+  const ti=document.getElementById('ticker-inner');
+  if(ti){ti.getAnimations().forEach(a=>a.cancel());ti.innerHTML='Agents reset — ready to deploy';}
+  const th=document.getElementById('ticker-history');if(th)th.innerHTML='';
+  const bstart=document.getElementById('bstart');if(bstart)bstart.disabled=false;
+  placeAccounts();
+  updateKPIs();
+}
+
+async function testAPI(){
+  const k=window._runtimeKey||API_KEY;
+  if(!k||k==='PASTE_YOUR_KEY_HERE'){alert('Enter API key first.');return;}
+  addLog('Testing API…','lm');
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:50,messages:[{role:'user',content:'Say OK'}]})});
+    const d=await r.json();
+    addLog(r.ok?'✓ API connected: '+d.content[0].text:'✗ API error: '+d.error?.message,'lb');
+  }catch(e){addLog('✗ '+e.message,'le');}
+}
+
+// ── REASONING BOARD ──
+function openStory(){
+  const body=document.getElementById('modal-reasoning-body');
+  const typeIcons={scan:'🔭',pull:'📥',assess:'🔍',escalate:'🚨',action:'✅',plan:'📋',err:'✗'};
+  const typeColors={scan:'#00ffdd',pull:'#60a5fa',assess:'#ffd700',escalate:'#ff4444',action:'#4aff9a',plan:'#aa44ff',err:'#ff4444'};
+  const typeLabels={scan:'Scanning Portfolio',pull:'Pulling Account Data',assess:'Risk Assessment',escalate:'Creating Escalation',action:'Assigning Action',plan:'Planning',err:'Error'};
+
+  const agentWhy={
+    scout:{scan:'Scout takes a wide-angle view of the entire portfolio — her job is to surface anything the specialists might miss.',pull:'Scout drills into account data to validate the signal before raising an alert.',assess:'Scout synthesises all signals into a health score recommendation for the team.',escalate:'Scout has confirmed the risk is real and urgent — she escalates before it reaches a point of no return.',action:'Scout assigns a concrete next step to ensure someone owns the recovery.'},
+    pulse:{scan:'Pulse monitors satisfaction signals — a drop in NPS is often the first warning before a churn event.',pull:'Pulse pulls survey and feedback data to understand the sentiment behind the numbers.',assess:'Pulse translates qualitative feedback into a structured risk verdict.',escalate:'Pulse has identified a satisfaction crisis — early escalation gives the team the best chance of recovery.',action:'Pulse recommends a specific outreach action to re-engage the account.'},
+    lens:{scan:'Lens tracks product engagement — declining sessions and feature adoption precede almost every churn.',pull:'Lens goes deep on usage data to understand exactly where the account is disengaging.',assess:'Lens maps usage patterns to churn probability — the data tells a clear story.',escalate:'Lens has found a usage collapse that signals the account is at serious risk of non-renewal.',action:'Lens assigns a specific enablement action to rebuild product engagement.'},
+    rex:{scan:'Rex focuses on accounts approaching renewal — the final 30 days are when risk crystallises into decisions.',pull:'Rex examines the commercial details: contract terms, renewal history, and any outstanding issues.',assess:'Rex evaluates the renewal probability based on commercial signals and relationship health.',escalate:'Rex has identified a renewal under threat — the window to act is closing fast.',action:'Rex assigns a commercial action to secure the renewal before the deadline.'},
+    vera:{scan:'Vera listens to the customer\'s voice — support ticket patterns and escalation history reveal what customers won\'t say directly.',pull:'Vera reviews support history and relationship notes to understand the customer\'s journey.',assess:'Vera synthesises the qualitative picture into a relationship health verdict.',escalate:'Vera has identified a relationship breakdown that requires executive intervention.',action:'Vera assigns a relationship repair action — often a direct call from a senior stakeholder.'},
+    cole:{scan:'Cole monitors financial signals — payment delays and budget reviews often precede contract reductions.',pull:'Cole examines ARR data, payment history, and any signals of budget pressure.',assess:'Cole translates financial signals into a commercial risk rating.',escalate:'Cole has identified a financial threat to the ARR — immediate commercial intervention needed.',action:'Cole assigns a commercial action to protect the revenue line.'},
+    quinn:{scan:'Quinn triages the highest-value at-risk accounts — her job is to make sure nothing falls through the cracks.',pull:'Quinn cross-references multiple data sources to build a complete picture before escalating.',assess:'Quinn synthesises cross-functional signals into a priority score for the response team.',escalate:'Quinn has triaged this account to the top of the response queue — it needs immediate attention.',action:'Quinn coordinates the response actions across teams to ensure a unified recovery plan.'},
+    sage:{scan:'Sage identifies accounts that need a structured save plan, not just an alert — complex recoveries require strategy.',pull:'Sage gathers all available context before building a recovery plan — a rushed plan fails.',assess:'Sage maps the root cause to the most effective recovery pathway.',escalate:'Sage has built a recovery plan and escalates with full context and a clear path forward.',action:'Sage assigns a strategic action that addresses the root cause, not just the symptom.'},
+  };
+
+  const activeAgents=AGENTS.filter(ag=>AGD[ag.id].decisions.length>0);
+  if(!activeAgents.length){
+    body.innerHTML='<div style="font-family:var(--mono);font-size:13px;color:#4a7a5a;padding:3rem;text-align:center">No decisions yet — run the agents first.</div>';
+  }else{
+    const totalDecs=AGENTS.reduce((s,ag)=>s+AGD[ag.id].decisions.length,0);
+    body.innerHTML='<div style="font-family:var(--mono);font-size:11px;color:#4a7a5a;margin-bottom:1rem">'+totalDecs+' decisions · '+activeAgents.length+' active agents · reasoning from Claude API responses</div>'
+      +'<div class="kanban-outer" style="display:flex;gap:10px">'
+      +AGENTS.map(ag=>{
+        const decs=AGD[ag.id].decisions||[];
+        const arr=AGD[ag.id].arrProtected||0;
+        const rgb=hexRgb(ag.color);const cr=rgb[0],cg=rgb[1],cb=rgb[2];
+        const wm=agentWhy[ag.id]||{};
+        const cards=!decs.length
+          ?'<div style="font-family:var(--mono);font-size:10px;color:#2a4a3a;padding:12px;text-align:center">No decisions yet</div>'
+          :decs.map(d=>{
+              const why=d.thought?d.thought:(wm[d.type]||'Decision based on current state.');
+              const tc=typeColors[d.type]||'#2a4a3a';
+              return'<div style="background:rgba('+cr+','+cg+','+cb+',0.04);border:1px solid rgba('+cr+','+cg+','+cb+',0.1);border-radius:6px;padding:8px 10px;margin-bottom:6px">'
+                +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">'
+                +'<span style="font-family:var(--mono);font-size:8px;color:#2a4a3a;flex-shrink:0">'+d.ts+'</span>'
+                +'<span style="font-family:var(--mono);font-size:8px;font-weight:700;color:'+tc+';padding:1px 5px;border-radius:3px;background:'+tc+'18;flex-shrink:0">'+(typeIcons[d.type]||'·')+' '+(typeLabels[d.type]||d.type)+'</span>'
+                +'</div>'
+                +'<div style="font-family:var(--mono);font-size:10px;color:#e2ffe8;margin-bottom:4px">'+d.text+'</div>'
+                +(why?'<div style="font-size:10px;color:#64748b;line-height:1.6;font-style:italic;border-left:2px solid rgba(255,255,255,0.08);padding-left:6px">&ldquo;'+why.substring(0,200)+(why.length>200?'&hellip;':'')+'&rdquo;</div>':'')
+                +'</div>';
+            }).join('');
+        return'<div style="min-width:230px;max-width:230px;flex-shrink:0">'
+          +'<div style="background:rgba('+cr+','+cg+','+cb+',0.08);border:1px solid rgba('+cr+','+cg+','+cb+',0.25);border-radius:8px 8px 0 0;padding:10px 12px;position:sticky;top:0">'
+          +'<div style="display:flex;align-items:center;gap:6px">'
+          +'<span style="font-size:16px">'+ag.emoji+'</span>'
+          +'<div><div style="font-family:var(--mono);font-size:11px;font-weight:700;color:'+ag.color+'">'+ag.name+'</div>'
+          +'<div style="font-family:var(--mono);font-size:9px;color:#4a7a5a">'+decs.length+' decisions</div></div>'
+          +'<div style="margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:700;color:'+(arr>0?ag.color:'#2a4a3a')+'">'+(arr>0?'$'+(arr/1000).toFixed(0)+'k':'—')+'</div>'
+          +'</div></div>'
+          +'<div class="kanban-body" style="border:1px solid rgba('+cr+','+cg+','+cb+',0.18);border-top:none;border-radius:0 0 8px 8px;padding:8px;background:rgba(4,10,20,0.6);max-height:calc(100vh - 220px);overflow-y:auto;scrollbar-color:'+ag.color+' rgba(0,0,0,0.2);scrollbar-width:thin">'
+          +cards+'</div></div>';
+      }).join('')+'</div>';
+  }
+  document.getElementById('modal-reasoning').classList.add('open');
+}
+
+function closeExpand(type){
+  const el=document.getElementById('modal-'+type);if(el)el.classList.remove('open');
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeExpand('reasoning');});
+
+// ── INTRO KEY HANDLING ──
+function onKeyInput(v){
+  const btn=document.getElementById('launch-btn'),st=document.getElementById('key-st'),inp=document.getElementById('intro-key');
+  if(v.startsWith('sk-ant')){st.innerHTML='<span style="color:#00ff88">✓ Valid</span>';btn.style.opacity='1';btn.style.pointerEvents='all';inp.style.borderColor='rgba(6,182,212,0.5)';}
+  else if(v.length){st.innerHTML='<span style="color:#ff4444">✗ Invalid</span>';btn.style.opacity='.5';}
+  else{st.textContent='Enter →';btn.style.opacity='.5';}
+}
+function launchAgents(){
+  const v=document.getElementById('intro-key').value.trim(),k=v||API_KEY;
+  if(!k||k==='PASTE_YOUR_KEY_HERE'||!k.startsWith('sk-ant')){document.getElementById('intro-key').style.borderColor='rgba(255,68,68,0.6)';return;}
+  window._runtimeKey=k;
+  const el=document.getElementById('intro-overlay');
+  el.style.transition='opacity .4s';el.style.opacity='0';
+  setTimeout(()=>el.style.display='none',420);
+}
+
+// ── INTRO AGENTS GRID ──
+function buildIntroAgents(){
+  const wrap=document.getElementById('intro-agents');if(!wrap)return;
+  wrap.innerHTML=AGENTS.map(ag=>`
+    <div style="background:rgba(${hexRgb(ag.color).join(',')},0.06);border:1px solid rgba(${hexRgb(ag.color).join(',')},0.2);border-radius:7px;padding:7px 8px;text-align:center">
+      <div style="font-size:16px;margin-bottom:3px">${ag.emoji}</div>
+      <div style="font-family:var(--mono);font-size:9px;font-weight:700;color:${ag.color}">${ag.name}</div>
+      <div style="font-family:var(--mono);font-size:7px;color:#4a7a5a;margin-top:1px">${ag.role}</div>
+    </div>`).join('');
+}
+
+// ── INIT ──
+AGENTS.forEach(ag=>initAGD(ag));
+buildAgentCards();
+buildIntroAgents();
+setTimeout(()=>{ initRadar(); },200); setTimeout(()=>{ initTimeline(); },600);
+window.addEventListener('resize',()=>{ setTimeout(()=>initRadar(),100); setTimeout(()=>initTimeline(),250); });
+
+// Pre-fill key if hardcoded
+if(API_KEY!=='PASTE_YOUR_KEY_HERE'){
+  const inp=document.getElementById('intro-key');if(inp){inp.value=API_KEY;onKeyInput(API_KEY);window._runtimeKey=API_KEY;}
+}
+</script>
+</body>
+</html>
